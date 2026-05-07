@@ -35,7 +35,7 @@ pipeline {
                      * Run container as Jenkins user to avoid root-owned workspace files.
                      * Current Jenkins UID/GID from previous lab: 972:969
                      */
-                    args '-u 972:969 -e HOME=/tmp -e MAVEN_CONFIG=/tmp/.m2'
+                    args '-u 972:969 -e HOME=/tmp -e MAVEN_CONFIG=/tmp/.m2 -v /var/lib/jenkins/.m2:/tmp/.m2'
                 }
             }
 
@@ -62,19 +62,30 @@ pipeline {
                     }
                 }
 
-                stage('Run Tests and Package') {
-                    steps {
-                        sh '''
-                            set -e
+stage('Run Tests and Package') {
+    steps {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'nexus-creds',
+                usernameVariable: 'NEXUS_USER',
+                passwordVariable: 'NEXUS_PASSWORD'
+            )
+        ]) {
+            sh '''
+                set -e
 
-                            echo "Running Maven clean test package..."
-                            mvn clean test package
+                echo "Running Maven clean test package using Nexus mirror and persistent Maven cache..."
 
-                            echo "Generated target files:"
-                            ls -lh target
-                        '''
-                    }
-                }
+                mvn -s .mvn/settings.xml \
+                    -Dmaven.repo.local=/tmp/.m2/repository \
+                    clean test package
+
+                echo "Generated target files:"
+                ls -lh target
+            '''
+        }
+    }
+}
 
                 stage('Archive and Stash JAR') {
                     steps {
